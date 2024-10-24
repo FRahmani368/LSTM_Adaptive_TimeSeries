@@ -1,5 +1,8 @@
 """All functions related to loading the data"""
+import datetime
+from datetime import date
 import numpy as np
+import pandas as pd
 import torch
 from core.load_data.normalizing import transNorm
 from core.load_data.time import tRange2Array
@@ -60,20 +63,92 @@ def train_val_test_split(set_name, args, time1, x_total, y_total):
 
     return x, y
 
+def percentage_day_cal(D_N_P, args):
+    sites = D_N_P['site_no'].unique()
+    tempData = []
+    offset = []
+    ## calculating offset
+    first_tr_date = pd.to_datetime(str(args["t_train"][0]))
+    d1_general = datetime.datetime(first_tr_date.year, first_tr_date.month, first_tr_date.day)
+    for ind, s in enumerate(sites):
+        S_training = D_N_P.loc[D_N_P['site_no'] == s, 'S_Training']
+        E_training = D_N_P.loc[D_N_P['site_no'] == s, 'E_Training']
+        d1 = datetime.datetime(S_training[ind].year, S_training[ind].month, S_training[ind].day)  #, S_training[ind].minute)
+        d2 = datetime.datetime(E_training[ind].year, E_training[ind].month, E_training[ind].day)
+        delta = d2 - d1
+        tempData.append(delta.days)
+
+        # calculating offest
+        delta_offset = d1 - d1_general
+        offset.append(delta_offset.days)
+
+    temp = pd.Series(tempData)
+    D_N_P['no_days'] = temp
+    D_N_P["offset"] = offset
+    total_days = np.sum(temp)
+    tempPercent = []
+    for s in sites:
+        days = D_N_P.loc[D_N_P['site_no'] == s, 'no_days'].values[0]
+        tempPercent.append(days/total_days)
+    temp1 = pd.Series(tempPercent)
+    D_N_P['day_percent'] = temp1
+    return D_N_P
+
+# def percentage_hour_cal(D_N_P, args):
+#     trees = D_N_P['site_no'].unique()
+#     tempData = []
+#     offset = []
+#     ## calculating offset
+#     first_tr_date = pd.to_datetime(str(args["t_train"][0]))
+#     d1_general = datetime.datetime(first_tr_date.year, first_tr_date.month, first_tr_date.day,
+#                                    first_tr_date.hour,
+#                                    first_tr_date.minute)
+#     for ind, pl in enumerate(trees):
+#         S_training = D_N_P.loc[D_N_P['pl_code'] == pl, 'S_Training']
+#         E_training = D_N_P.loc[D_N_P['pl_code'] == pl, 'E_Training']
+#         d1 = datetime.datetime(S_training[ind].year, S_training[ind].month, S_training[ind].day, S_training[ind].hour, S_training[ind].minute)  #, S_training[ind].minute)
+#         d2 = datetime.datetime(E_training[ind].year, E_training[ind].month, E_training[ind].day, E_training[ind].hour, E_training[ind].minute)
+#         delta = d2 - d1
+#         hours_delta = delta.total_seconds() / 3600
+#         # print(pl, hours_delta)
+#         tempData.append(hours_delta)
+#
+#         # calculating offest
+#         delta_offset = d1 - d1_general
+#         hours_delta_offset = delta_offset.total_seconds() / 3600
+#         offset.append(int(hours_delta_offset))
+#
+#     temp = pd.Series(tempData)
+#     D_N_P['no_hours'] = temp
+#     D_N_P["offset"] = offset
+#     total_hours = np.sum(temp)
+#     tempPercent = []
+#     for pl in trees:
+#         hours = D_N_P.loc[D_N_P['pl_code'] == pl, 'no_hours'].values[0]
+#         tempPercent.append(hours/total_hours)
+#     temp1 = pd.Series(tempPercent)
+#     D_N_P['hour_percent'] = temp1
+#     return D_N_P
+
 def No_iter_nt_ngrid(set_name, args, x):
     nt, ngrid, nx = x.shape
+    D_N_P = pd.read_excel(args["D_N_P_path"])
+    D_N_P_new = percentage_day_cal(D_N_P, args)
+    nt_new = D_N_P_new['no_days'].sum() / ngrid
     t = tRange2Array(args[set_name])
     if t.shape[0] < args["rho"]:
         rho = t.shape[0]
     else:
         rho = args["rho"]
     nIterEp = int(
-        np.ceil(
-            np.log(0.01)
-            / np.log(1 - args["batch_size"] * rho / ngrid / (nt - args["warm_up"]))
-        )
-    )
-    return ngrid, nIterEp, nt, args["batch_size"]
+        np.ceil(np.log(0.01) / np.log(1 - args["batch_size"] * args["rho"] / ngrid / (nt_new - args["warm_up"]))))
+    # nIterEp = int(
+    #     np.ceil(
+    #         np.log(0.01)
+    #         / np.log(1 - args["batch_size"] * rho / ngrid / (nt - args["warm_up"]))
+    #     )
+    # )
+    return ngrid, nIterEp, nt_new, args["batch_size"], D_N_P_new
 
 def train_val_test_split_action1(set_name, args, time1, x_total, y_total):
     t = tRange2Array(args[set_name])
@@ -140,6 +215,19 @@ def randomIndex(ngrid, nt, dimSubset, warm_up=0):
     iT = np.random.randint(0+warm_up, nt - rho, [batchSize])
     return iGrid, iT
 
+def randomIndex_percentage(ngrid,dimSubset, D_N_P_new, warm_up=0):
+    batchSize, rho = dimSubset
+    iGrid = np.random.choice(list(range(0, ngrid)), size=batchSize, p=D_N_P_new['day_percent'].tolist())
+    iT = []
+    for i in iGrid:
+        nt = D_N_P_new.iloc[i]['no_days']
+        offset = D_N_P_new.iloc[i]['offset']
+        if nt == rho:
+            T= offset+0
+        else:
+            T = offset + np.random.randint(0+warm_up, nt-rho, [1])[0]
+        iT.append(T)
+    return iGrid, iT
 
 def create_tensor(rho, mini_batch, x, y):
     """
@@ -190,9 +278,9 @@ def create_tensor_list(x, y):
             tensor_list.append(_var)
     return tensor_list
 
-def take_sample_train(args, dataset_dictionary, ngrid_train, nt, batchSize):
+def take_sample_train(args, dataset_dictionary, ngrid_train, nt, batchSize, D_N_P_new):
     dimSubset = [batchSize, args["rho"]]
-    iGrid, iT = randomIndex(ngrid_train, nt, dimSubset, warm_up=args["warm_up"])
+    iGrid, iT = randomIndex_percentage(ngrid_train, dimSubset, D_N_P_new, warm_up=args["warm_up"])
     dataset_dictionary_sample = dict()
     dataset_dictionary_sample["iGrid"] = iGrid
     dataset_dictionary_sample["inputs_NN_scaled"] = selectSubset(args, dataset_dictionary["inputs_NN_scaled"],
@@ -210,7 +298,6 @@ def take_sample_train(args, dataset_dictionary, ngrid_train, nt, batchSize):
     )[args["warm_up"]:, :, :]
     # dataset_dictionary_sample["obs"] = converting_flow_from_ft3_per_sec_to_mm_per_day(args,
     return dataset_dictionary_sample
-
 
 
 def take_sample_test(args, dataset_dictionary, iS, iE):

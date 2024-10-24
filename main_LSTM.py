@@ -13,7 +13,7 @@ def main_LSTM(args):
     # Creating output directories and adding it to args
     args = create_output_dirs(args)
 
-    if 0 in args["Action"]:  # training mode
+    if "Train" in args["Action"]:  # training mode
         model = create_NN_models(args)
         optim = torch.optim.Adadelta(model.parameters())
         train_test.train_NN_model(
@@ -21,7 +21,7 @@ def main_LSTM(args):
             model=model,
             optim=optim
         )
-    if 1 in args["Action"]:  # testing mode
+    if "Test" in args["Action"]:  # testing mode
         modelFile = os.path.join(args["out_dir"], "model_Ep" + str(args["EPOCH_testing"]) + ".pt")
         model = torch.load(modelFile)
         train_test.test_NN_model(

@@ -38,7 +38,8 @@ def train_NN_model(args, model, optim):
         torch.backends.cudnn.deterministic = True
         CUDA_LAUNCH_BLOCKING = 1
 
-    ngrid_train, nIterEp, nt, batchSize = No_iter_nt_ngrid("t_train", args, dataset_dictionary["inputs_NN_scaled"])
+    ngrid_train, nIterEp, nt, batchSize, D_N_P_new = No_iter_nt_ngrid("t_train", args,
+                                                                      dataset_dictionary["inputs_NN_scaled"])
     model.zero_grad()
     model.train()
     # training
@@ -46,7 +47,8 @@ def train_NN_model(args, model, optim):
         lossEp = 0
         t0 = time.time()
         for iIter in range(1, nIterEp + 1):
-            dataset_dictionary_sample = take_sample_train(args, dataset_dictionary, ngrid_train, nt, batchSize)
+            dataset_dictionary_sample = take_sample_train(args, dataset_dictionary, ngrid_train, nt, batchSize,
+                                                          D_N_P_new)
             # Batch running of the differentiable model
             out_model = model(dataset_dictionary_sample)
 
@@ -176,7 +178,7 @@ def save_outputs(args, list_out_model, y_obs, calculate_metrics=True):
 
             # Show boxplots of the results
             plt.rcParams["font.size"] = 14
-            keyLst = ["Bias", "RMSE", "ubRMSE", "NSE", "Corr"]
+            keyLst = ["Bias", "RMSE", "KGE", "NSE", "Corr"]
             dataBox = list()
             for iS in range(len(keyLst)):
                 statStr = keyLst[iS]

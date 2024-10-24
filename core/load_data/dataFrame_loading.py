@@ -19,6 +19,7 @@ class Data_Reader(ABC):
 
 class DataFrame_dataset(Data_Reader):
     def __init__(self, args, tRange, data_path, attr_path=None):
+        self.tRange = tRange
         self.time = tRange2Array(tRange)
         self.args = args
         self.inputfile = data_path
@@ -71,9 +72,15 @@ class DataFrame_dataset(Data_Reader):
             xattr = np.transpose(xattr, (0, 2, 1))
             x = np.concatenate((x, xattr), axis=2)
 
-        data = x
+        tLst = tRange2Array(args["tRange"])
         C, ind1, ind2 = np.intersect1d(self.time, tLst, return_indices=True)
-        data = data[:, ind2, :]
+        x = x[:, ind2, :]
+        if self.tRange == args["t_train"]:
+            data = select_by_time(args, x, self.time, mtd="train")
+        elif self.tRange == args['t_test']:
+            data = select_by_time(args, x, self.time, mtd="test")
+        else:
+            raise ValueError()
         return np.swapaxes(data, 1, 0)
 
     def getDataConst(self, args, varLst, doNorm=True, rmNan=True):
@@ -106,6 +113,7 @@ class DataFrame_dataset(Data_Reader):
 
 class numpy_dataset(Data_Reader):
     def __init__(self, args, tRange, data_path, attr_path=None):
+        self.tRange = tRange
         self.time = tRange2Array(tRange)
         self.args = args
         self.inputfile = data_path   # the dynamic data
@@ -177,10 +185,15 @@ class numpy_dataset(Data_Reader):
             xattr = np.transpose(xattr, (0, 2, 1))
             x = np.concatenate((x, xattr), axis=2)
 
-        data = x
         tLst = tRange2Array(args["tRange"])
         C, ind1, ind2 = np.intersect1d(self.time, tLst, return_indices=True)
-        data = data[:, ind2, :]
+        x = x[:, ind2, :]
+        if self.tRange == args["t_train"]:
+            data = select_by_time(args, x, self.time, mtd = "train")
+        elif self.tRange == args['t_test']:
+            data = select_by_time(args, x, self.time, mtd = "test")
+        else:
+            raise ValueError()
         return np.swapaxes(data, 1, 0)
 
     def getDataConst(self, args, varLst, doNorm=True, rmNan=True):
@@ -255,3 +268,24 @@ def converting_flow_from_ft3_per_sec_to_mm_per_day(args, c_NN_sample, obs_sample
         area = np.expand_dims(c_NN_sample[:, varC_NN.index(area_name)], axis=0).repeat(obs_flow_v.shape[0], 0)  # np ver
         obs_sample[:, :, varTar_NN.index("00060_Mean")] = (10 ** 3) * obs_flow_v * 0.0283168 * 3600 * 24 / (area * (10 ** 6)) # convert ft3/s to mm/day
     return obs_sample
+
+def select_by_time(args, x, t_all, mtd):
+    data = np.full(x.shape, float('nan'), dtype=x.dtype)
+    D_N_P = pd.read_excel(args['D_N_P_path'])
+    ngrid, nt, nx = x.shape
+    if mtd == "train":
+        for ii in range(0, ngrid):
+            tstart = D_N_P.iloc[ii]['S_Training']
+            tend = D_N_P.iloc[ii]['E_Training']
+            t_subset = pd.date_range(tstart, tend, freq='D')[:-1]
+            C, ind1, ind2 = np.intersect1d(t_subset, t_all, return_indices=True)
+            data[ii:ii + 1, ind2, :] = x[ii:ii + 1, ind2, :]
+    elif mtd == "test":
+        for ii in range(0, ngrid):
+            tstart = D_N_P.iloc[ii]['S_Testing']
+            tend = D_N_P.iloc[ii]['E_Testing']
+            t_subset = pd.date_range(tstart, tend, freq='D')
+            C, ind1, ind2 = np.intersect1d(t_subset, t_all, return_indices=True)
+            data[ii:ii + 1, ind2, :] = x[ii:ii + 1, ind2, :]
+
+    return data
