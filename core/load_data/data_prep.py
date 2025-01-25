@@ -300,11 +300,13 @@ def take_sample_train(args, dataset_dictionary, ngrid_train, nt, batchSize, D_N_
     return dataset_dictionary_sample
 
 
-def take_sample_test(args, dataset_dictionary, iS, iE):
+def take_sample_test(args, dataset_dictionary, iS, iE, time_range_mask):
     dataset_dictionary_sample = dict()
     for key in dataset_dictionary.keys():
         if len(dataset_dictionary[key].shape) == 3:
-            dataset_dictionary_sample[key] = dataset_dictionary[key][:, iS: iE, :].to(
+            data_temp = dataset_dictionary[key][time_range_mask, :, :].to(
+                args["device"])
+            dataset_dictionary_sample[key] = data_temp[:, iS: iE, :].to(
                 args["device"])
         elif len(dataset_dictionary[key].shape) == 2:
             dataset_dictionary_sample[key] = dataset_dictionary[key][iS: iE, :].to(

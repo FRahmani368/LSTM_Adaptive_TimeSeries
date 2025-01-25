@@ -7,7 +7,7 @@ import time
 from post import stat, plot
 import matplotlib.pyplot as plt
 from core.load_data.normalizing import init_norm_stats
-from core.load_data.dataFrame_loading import loadData
+from core.load_data.dataFrame_loading import loadData, basinNorm
 from core.load_data.data_prep import (
     No_iter_nt_ngrid,
     take_sample_train,
@@ -96,39 +96,61 @@ def test_NN_model(args, model):
         if type(dataset_dictionary[key]) == np.ndarray:  # to avoid int or others to be saved
             dataset_dictionary[key] = torch.from_numpy(dataset_dictionary[key]).float()
 
-    # args_mod = args.copy()
-    args["batch_size"] = args["no_basins"]
+    # # args_mod = args.copy()
+    # args["batch_size"] = args["no_basins"]
     nt, ngrid, nx = dataset_dictionary["inputs_NN_scaled"].shape
-    rho = args["rho"]
-
-    batch_size = args["batch_size"]
-    iS = np.arange(0, ngrid, batch_size)
+    # rho = args["rho"]
+    y_obs = dataset_dictionary["obs"]
+    y_pred = torch.full(y_obs.shape, float('nan'), dtype=torch.float64)
+    D_N_P = pd.read_excel(args['D_N_P_path'])
+    ttest_All = pd.date_range(pd.to_datetime(str(args['t_test'][0])), pd.to_datetime(str(args['t_test'][1])), freq='D')
+    # list_out_model = []
+    # for i in range(0, len(iS)):
+    iS = np.arange(0, ngrid)
     iE = np.append(iS[1:], ngrid)
-    list_out_model = []
-    for i in range(0, len(iS)):
-        dataset_dictionary_sample = take_sample_test(args, dataset_dictionary, iS[i], iE[i])
+    for ii in range(0, ngrid):
+        tstart = D_N_P.iloc[ii]['S_Testing']
+        tend = D_N_P.iloc[ii]['E_Testing']
+        ttest_subset = pd.date_range(tstart, tend, freq='D')
+        # dataset_dict.shapeionary_sample = take_sample_test(args, dataset_dictionary, iS[i], iE[i])
+        C, ind1, ind2 = np.intersect1d(ttest_subset, ttest_All, return_indices=True)
+        dataset_dictionary_sample = take_sample_test(args, dataset_dictionary, iS[ii], iE[ii], ind2)
         out_model = model(dataset_dictionary_sample)
-        # Convert all tensors in the dictionary to CPU
-        out_model_cpu = out_model.cpu().detach()
-        out_model_cpu_real = transNorm(args, out_model_cpu.numpy(), varLst=args["target"], toNorm=False)
-        # out_diff_model_cpu = tuple(outs.cpu().detach() for outs in out_diff_model)
-        list_out_model.append(torch.tensor(out_model_cpu_real))
-
+        out_model_cpu = out_model.cpu().detach().numpy()
+        out_model_cpu_real = transNorm(args, out_model_cpu, varLst=args["target"], toNorm=False)
+        y_pred[ind2, ii:ii + 1, :] = torch.tensor(out_model_cpu_real)
+        # if flow in the outputs, it is unitless and needs to convert to ft3/s
+    if "00060_Mean" in args["target"]:
+        flow = y_pred[:, :, args["target"].index("00060_Mean")]
+        flow_ft3s = basinNorm(flow=flow,
+                              args=args,
+                              c_NN_sample=dataset_dictionary["c_NN"].cpu().detach(),
+                              toNorm=False)
+        y_pred[:, :, args["target"].index("00060_Mean")] = flow_ft3s
     # getting rid of warm-up period in observation dataset
     y_obs = dataset_dictionary["obs"]
+    ## convert obs flow from untiless to ft3/s
+    if "00060_Mean" in args["target"]:
+        flow = y_obs[:, :, args["target"].index("00060_Mean")]
+        flow_ft3s = basinNorm(flow=flow,
+                              args=args,
+                              c_NN_sample=dataset_dictionary["c_NN"],
+                              toNorm=False)
+        y_obs[:, :, args["target"].index("00060_Mean")] = flow_ft3s
 
-    save_outputs(args, list_out_model, y_obs, calculate_metrics=True)
+    save_outputs(args, y_pred, y_obs, calculate_metrics=True)
     torch.cuda.empty_cache()
     print("Testing ended")
-def save_outputs(args, list_out_model, y_obs, calculate_metrics=True):
 
-    if len(list_out_model[0].shape) == 3:
-        dim = 1
-    else:
-        dim = 0
-    concatenated_tensor = torch.cat(list_out_model, dim=dim)
+def save_outputs(args, y_sim, y_obs, calculate_metrics=True):
+
+    # if len(list_out_model[0].shape) == 3:
+    #     dim = 1
+    # else:
+    #     dim = 0
+    # concatenated_tensor = torch.cat(list_out_model, dim=dim)
     file_name = "NN_sim" + ".npy"
-    np.save(os.path.join(args["out_dir"], args["testing_dir"], file_name), concatenated_tensor.numpy())
+    np.save(os.path.join(args["out_dir"], args["testing_dir"], file_name), y_sim.numpy())
 
     # Reading flow observation
     for var in args["target"]:
@@ -141,13 +163,13 @@ def save_outputs(args, list_out_model, y_obs, calculate_metrics=True):
         obsLst = list()
         name_list = []
         if "00060_Mean" in args["target"]:
-            flow_sim = concatenated_tensor[:, :, args["target"].index("00060_Mean")]
+            flow_sim = y_sim[:, :, args["target"].index("00060_Mean")]
             flow_obs = y_obs[:, :, args["target"].index("00060_Mean")]
             predLst.append(flow_sim.numpy())
             obsLst.append(np.expand_dims(flow_obs, 2))
             name_list.append("flow")
         if "00010_Mean" in args["target"]:
-            temp_sim = concatenated_tensor[:, :, args["target"].index("00010_Mean")]
+            temp_sim = y_sim[:, :, args["target"].index("00010_Mean")]
             temp_obs = y_obs[:, :, args["target"].index("00010_Mean")]
             predLst.append(temp_sim.numpy())
             obsLst.append(np.expand_dims(temp_obs, 2))

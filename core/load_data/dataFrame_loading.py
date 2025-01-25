@@ -243,14 +243,34 @@ def loadData(args, trange):
     # getting inputs for NN model:
     out_dict["x_NN"] = forcing_dataset_class.read_data.getDataTs(args, varLst=args["varT_NN"])
     out_dict["c_NN"] = forcing_dataset_class.read_data.getDataConst(args, varLst=args["varC_NN"])
+    # if flow in inputs --> ## converting the flow in ft3 / s to unitless
+    if ("00060_Mean" in args["varT_NN"]) or ("combine_discharge" in args["varT_NN"]):
+        if "00060_Mean" in args["varT_NN"]:
+            flow_var_name = "00060_Mean"
+        elif "combine_discharge" in args["varT_NN"]:
+            flow_var_name = "combine_discharge"
+        flow = out_dict["x_NN"][:, :, args["varT_NN"].index(flow_var_name)]
+        flow_unitless = basinNorm(flow=flow,
+                                  args=args,
+                                  c_NN_sample=out_dict["c_NN"],
+                                  toNorm=True)
+        out_dict["x_NN"][:, :, args["varT_NN"].index(flow_var_name)] = flow_unitless
+
     obs_raw = forcing_dataset_class.read_data.getDataTs(args, varLst=args["target"])
-    ## converting the
+    ## converting the flow in ft3 / s to unitless
     if "00060_Mean" in args["target"]:
-        out_dict["obs"] = converting_flow_from_ft3_per_sec_to_mm_per_day(args,
-                                                                         out_dict["c_NN"],
-                                                                         obs_raw)
-    else:
-        out_dict["obs"] = obs_raw
+        # out_dict["obs"] = converting_flow_from_ft3_per_sec_to_mm_per_day(args,
+        #                                                                  out_dict["c_NN"],
+        #                                                                  obs_raw)
+        # to make flow unitless, we divide it to area and historical precipitation
+        flow = obs_raw[:,:, args["target"].index("00060_Mean")]
+        flow_unitless = basinNorm(flow=flow,
+                                    args=args,
+                                    c_NN_sample=out_dict["c_NN"],
+                                    toNorm=True)
+        obs_raw[:,:, args["target"].index("00060_Mean")] = flow_unitless
+
+    out_dict["obs"] = obs_raw
 
     return out_dict
 
@@ -289,3 +309,27 @@ def select_by_time(args, x, t_all, mtd):
             data[ii:ii + 1, ind2, :] = x[ii:ii + 1, ind2, :]
 
     return data
+
+def basinNorm(flow, args, c_NN_sample, toNorm):
+    varC_NN = args["varC_NN"]
+    if "DRAIN_SQKM" in varC_NN:
+        area_name = "DRAIN_SQKM"
+    elif "area_gages2" in varC_NN:
+        area_name = "area_gages2"
+    if "PPTAVG_BASIN" in varC_NN:
+        p_mean_name = "PPTAVG_BASIN"
+    elif "p_mean" in varC_NN:
+        p_mean_name = "p_mean"
+    area = np.expand_dims(c_NN_sample[:, varC_NN.index(area_name)], axis=0).repeat(flow.shape[0], 0)  # np ver
+    p_mean = np.expand_dims(c_NN_sample[:, varC_NN.index(p_mean_name)], axis=0).repeat(flow.shape[0], 0)
+    if toNorm is True:
+        flow_new = flow * 0.0283168 * 3600 * 24 / (
+                    area * (10 ** 6) * p_mean * 10 ** (-3))   # p_mean was mm, and area was km2
+    else:
+        flow_new = (
+                flow
+                * ((area * (10 ** 6)) * (p_mean * 10 ** (-3)))
+                / (0.0283168 * 3600 * 24)
+        )
+
+    return flow_new

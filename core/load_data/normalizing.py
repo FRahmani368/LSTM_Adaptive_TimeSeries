@@ -79,7 +79,7 @@ def calStatAll(args, x, c, y):
     for i, target_name in enumerate(args["target"]):
         # calculating especialized statistics for streamflow
         if target_name == "00060_Mean":
-            statDict[args["target"][i]] = calStatbasinnorm(y[:, :, i: i+1], c, args)
+            statDict[args["target"][i]] = calStatgamma(y[:, :, i: i+1])
         else:
             statDict[args["target"][i]] = calStat(y[:, :, i: i+1])
 
@@ -90,7 +90,7 @@ def calStatAll(args, x, c, y):
         if var == "prcp(mm/day)":
             statDict[var] = calStatgamma(x[:, :, k])
         elif (var == "00060_Mean") or (var == "combine_discharge"):
-            statDict[var] = calStatbasinnorm(x[:, :, k: k + 1], x, args)
+            statDict[var] = calStatgamma(x[:, :, k])
         else:
             statDict[var] = calStat(x[:, :, k])
     # attributes

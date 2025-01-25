@@ -10,9 +10,9 @@ device: "cuda"
 
 #---------------------------------------------------------
 ##### Directories of forcings, attributes, and output
-forcing_path: "/data/fzr5082/f1223_1023_daymet_20240826.npy"
-attr_path: "/data/fzr5082/attr1223_1023_daymet_20240826.npy"
-output_model: "/data/fzr5082/models"
+forcing_path: "H:\\Frshd\\inputs\\PGML_STemp_results\\inputs\\inputs_2003\\dataset_20240826\\f1223_1023_daymet_20240826.npy"
+attr_path: "H:\\Frshd\\inputs\\PGML_STemp_results\\inputs\\inputs_2003\\dataset_20240826\\attr1223_1023_daymet_20240826.npy"
+output_model: "H:\\Frshd\\models"
 
 #----------------------------------------------------------
 ##### neural network configuration
@@ -20,11 +20,11 @@ NN_model_name: "LSTM"   # it can be "MLP", "LSTM" too.
 warm_up: 0
 rho: 365
 batch_size: 100
-EPOCHS: 1
+EPOCHS: 5
 hidden_size: 256
 dropout: 0.5
 saveEpoch: 1
-EPOCH_testing: 1   # which epoch you want to pick to test?### you can choose different types of loss functions based on your need:
+EPOCH_testing: 5   # which epoch you want to pick to test?### you can choose different types of loss functions based on your need:
 no_basins: 25   # number of basins sampled in testing
 
 #----------------------------------------------------------
@@ -45,17 +45,17 @@ varC_NN: [
    ###  1- "RmseLoss_flow_comb",            2- "RmseLoss_flow_temp",      3- "RmseLoss_flow_temp_BFI"
    ###  4- "RmseLoss_flow_temp_BFI_PET",    5- "RmseLoss_BFI_temp"   ,    6- "NSEsqrtLoss_flow_temp"
    ###  7- "NSEsqrtLoss_flow"
-loss_function: "RmseLoss_temp"
+loss_function: "RmseLoss_flow_comb"
 loss_function_weights:
     w1: 5      # w1: flow loss weight (11.0), for RmseLoss_BFI_temp(w1=5.0, w2=1.0, w3=0.05,)
     w2: 1.0
-target: ["00010_Mean"]#, "00010_Mean"]#, "BFI_AVE"] #, "BFI_AVE", "PET"]     #
+target: ["00060_Mean"]#, "00010_Mean"]#, "BFI_AVE"] #, "BFI_AVE", "PET"]     #
 
 #-------------------------------------------------------
 # time ranges of dataset + training + testing
 tRange: [19800101, 20230101]
 t_train: [19800101, 20230101]   # there should be an overlap because of the warm_up
-t_test: [20100101, 20180101]    # the first year is for warm_up
+t_test: [20100101, 20230101]    # the first year is for warm_up
 
 #------------------------------------------------------
-D_N_P_path: "/data/fzr5082/D_N_P.xlsx"
+D_N_P_path: "G:\\Farshid\\GitHub\\LSTM_Adaptive_TimeSeries\\D_N_P.xlsx"
